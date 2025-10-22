@@ -8,7 +8,7 @@ import TwitterIcon from "@mui/icons-material/Twitter";
 import InstagramIcon from "@mui/icons-material/Instagram";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import { useFooter, useDatosGenerales } from "../../contextos/agencia/DatosAgenciaContext";
-import MapaFooter from "./MapaFooter";
+//import MapaFooter from "./MapaFooter";
 
 const DerechaArriba: FunctionComponent = () => {
   const footer = useFooter();
