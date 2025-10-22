@@ -1,4 +1,3 @@
-import React from "react";
 import Slider from "react-slick";
 import { Box, CircularProgress, IconButton } from "@mui/material";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";

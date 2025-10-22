@@ -1,4 +1,4 @@
-import React from "react";
+
 import { Box, Typography, Grid, IconButton, Skeleton, Tooltip } from "@mui/material";
 import ShareIcon from "@mui/icons-material/Share";
 import { useTarjetas, useDatosGenerales } from "../../contextos/agencia/DatosAgenciaContext";

@@ -4,7 +4,7 @@ import path from 'path';
 
 // 🔧 Agregamos configuración de Vitest
 export default defineConfig({
-  plugins: [react()],
+  plugins: [ react({ jsxRuntime: 'classic' })],
   define: {
     'process.env': {},
   },

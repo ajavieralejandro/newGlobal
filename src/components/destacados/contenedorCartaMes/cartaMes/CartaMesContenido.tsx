@@ -1,4 +1,3 @@
-import React from "react";
 import { CardContent, Typography, Tooltip } from "@mui/material";
 import { useDatosGenerales, useTarjetas } from "../../../../contextos/agencia/DatosAgenciaContext";
 
