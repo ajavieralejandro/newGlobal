@@ -92,7 +92,6 @@ const DerechaArriba: FunctionComponent = () => {
           {footer?.ubicacion.direccion && (
             <>
               <Stack direction="row"  alignItems="center" justifyContent="center">
-                <MapaFooter/>
               </Stack>
             </>
           )}
