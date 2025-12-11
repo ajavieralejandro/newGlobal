@@ -10,59 +10,61 @@ export const useBusquedaPorCarta = () => {
 
   const navigate = useNavigate();
 
-  const buscarPorId = async (idPaquete: number) => {
+  const buscarPorId = async (idParam: string) => {
     setLoading(true);
     setErrorBusqueda(null);
 
     try {
-      const response = await fetch(`https://travelconnect.com.ar/get_paquete2/${idPaquete}`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      // 👇 Aseguramos string limpio (no number, no NaN)
+      const id = String(idParam).trim();
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          console.warn("⚠️ NO SE ENCONTRÓ EL PAQUETE.");
-          setPaqueteActivo(null);
-          setErrorBusqueda("No se encontró el paquete solicitado.");
-          return;
-        }
-        throw new Error(`ERROR AL BUSCAR PAQUETE. CÓDIGO: ${response.status}`);
-      }
-
-      // Sin transformador: usamos lo que venga.
-      const responseData: unknown = await response.json();
-      const dataArr: PaqueteData[] = Array.isArray(responseData)
-        ? (responseData as PaqueteData[])
-        : Array.isArray((responseData as any)?.data)
-        ? ((responseData as any).data as PaqueteData[])
-        : (responseData as any)?.data
-        ? [((responseData as any).data as PaqueteData)]
-        : responseData
-        ? [responseData as PaqueteData]
-        : [];
-
-      if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.log("🧩 Paquete(s) recibido(s) (sin transformar):", dataArr);
-      }
-
-      if (dataArr.length === 0) {
+      if (!id) {
+        setErrorBusqueda("ID de paquete inválido.");
         setPaqueteActivo(null);
-        setErrorBusqueda("No se encontró el paquete solicitado.");
         return;
       }
 
-      setPaqueteActivo(dataArr[0]);
-      localStorage.setItem("resultadosBusqueda", JSON.stringify(dataArr));
+      const url = `/get_paquete2/${encodeURIComponent(id)}`;
+      // console.log("Buscando paquete por ID:", id, "URL:", url);
+
+      const resp = await fetch(url);
+
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          setErrorBusqueda("Paquete no encontrado.");
+        } else {
+          setErrorBusqueda("Ocurrió un error al buscar el paquete.");
+        }
+        setPaqueteActivo(null);
+        return;
+      }
+
+      const body = await resp.json();
+
+      const paquete = body?.data as PaqueteData | undefined;
+
+      if (!paquete) {
+        setErrorBusqueda("Paquete no encontrado.");
+        setPaqueteActivo(null);
+        return;
+      }
+
+      // ✅ Guardar en estado
+      setPaqueteActivo(paquete);
+
+      // ✅ Seguir usando localStorage como antes
+      localStorage.setItem("paqueteAct", JSON.stringify(paquete));
+      localStorage.setItem("resultadosBusqueda", JSON.stringify([paquete]));
       window.dispatchEvent(new Event("actualizarPaquetes"));
 
+      // Si no estás ya en /paquetes-busqueda, te lleva
       if (!window.location.pathname.includes("/paquetes-busqueda")) {
-        navigate("/paquetes-busqueda");
+        navigate(`/paquetes-busqueda/${encodeURIComponent(id)}`);
       }
     } catch (error) {
-      console.error("❌ ERROR AL BUSCAR PAQUETE POR ID:", error);
-      setErrorBusqueda("Ocurrió un error al buscar el paquete. Intentalo más tarde.");
+      console.error("Error buscando paquete:", error);
+      setErrorBusqueda("Ocurrió un error al buscar el paquete.");
+      setPaqueteActivo(null);
     } finally {
       setLoading(false);
     }
