@@ -1,83 +1,184 @@
-import { useState } from "react";
+// src/hooks/useBusqueda.ts
+import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useFormulario } from "../contextos/formulario/FormularioContext";
-import { useDatosAgencia } from "../contextos/agencia/DatosAgenciaContext";
 import type { PaqueteData } from "../interfaces/PaqueteData";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "https://travelconnect.com.ar";
+interface FiltrosBusqueda {
+  destino?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  id?: string | number; // agencia id (tu backend lo lee como "id")
+  page?: number;
+  per_page?: number;
+  [key: string]: any;
+}
+
+type Pagination = {
+  current_page: number;
+  per_page: number;
+  total: number;
+  last_page: number;
+  from?: number | null;
+  to?: number | null;
+};
 
 export const useBusqueda = () => {
+  const [paquetes, setPaquetes] = useState<PaqueteData[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const {
-    ciudadOrigen,
-    destino,
-    fechaSalida,
-    viajeros, // { adultos, menores }
-    resetFormulario,
-  } = useFormulario();
-  const { datosAgencia } = useDatosAgencia();
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const guardarValoresPrevios = () => {
-    localStorage.setItem(
-      "valoresPrevios",
-      JSON.stringify({
-        ciudadOrigen,
-        destino,
-        fechaSalida,
-        viajeros,
-      })
-    );
+  const navigate = useNavigate();
+
+  const lastFiltrosRef = useRef<FiltrosBusqueda>({});
+  const abortRef = useRef<AbortController | null>(null);
+
+  const buildUrl = (filtros: FiltrosBusqueda) => {
+    const params = new URLSearchParams();
+
+    Object.entries(filtros).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        params.append(key, String(value));
+      }
+    });
+
+    return "/paquetes-paginados" + (params.toString() ? `?${params.toString()}` : "");
   };
 
-  const handleClick = async () => {
-    setLoading(true);
-
-    const payload = {
-      ciudadOrigen: ciudadOrigen ?? "",
-      destino: destino ?? "",
-      fechaSalida: fechaSalida ? fechaSalida.toISOString() : null,
-      viajeros, // { adultos, menores }
-      agencia_id: datosAgencia?.idAgencia,
-    };
-
-    console.log("📤 Enviando solicitud con los siguientes datos:", payload);
-
+  // ✅ búsqueda inicial (page=1)
+  const buscarPaquetes = useCallback(async (filtros: FiltrosBusqueda = {}) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/importar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        
-      });
+      setLoading(true);
+      setError(null);
 
-      let paquetes: PaqueteData[] = [];
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
 
-      if (response.status === 404) {
-        console.warn("⚠️ No se encontraron paquetes para la búsqueda.");
-        paquetes = [];
-      } else if (!response.ok) {
-        throw new Error(`HTTP ${response.status} - ${response.statusText}`);
-      } else {
-        paquetes = (await response.json()) as PaqueteData[];
+      const merged: FiltrosBusqueda = {
+        per_page: filtros.per_page ?? 12,
+        page: 1,
+        ...filtros,
+      };
+
+      lastFiltrosRef.current = merged;
+
+      const url = buildUrl(merged);
+      const resp = await fetch(url, { signal: abortRef.current.signal });
+
+      if (!resp.ok) {
+        setError("Error al buscar paquetes.");
+        setPaquetes([]);
+        setPagination(null);
+        return;
       }
 
-      console.log("📦 Paquetes recibidos:", paquetes);
+      const body = await resp.json();
+      const items = (body?.data ?? []) as PaqueteData[];
+      const pag = (body?.pagination ?? null) as Pagination | null;
 
-      localStorage.setItem("resultadosBusqueda", JSON.stringify(paquetes));
-      // ✅ Guardar valores ANTES del reset para persistir la última búsqueda
-      guardarValoresPrevios();
+      setPaquetes(items);
+      setPagination(pag);
+
+      localStorage.setItem("resultadosBusqueda", JSON.stringify(items));
       window.dispatchEvent(new Event("actualizarPaquetes"));
-      navigate("/paquetes-busqueda");
-      // ✅ Reset DESPUÉS de guardar y navegar
-      resetFormulario();
-    } catch (error) {
-      console.error("❌ Error en la búsqueda:", error);
-      alert("Hubo un error en la búsqueda. Por favor, intenta nuevamente.");
+    } catch (e: any) {
+      if (e?.name === "AbortError") return;
+      console.error("Error en buscarPaquetes:", e);
+      setError("Error al buscar paquetes.");
+      setPaquetes([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  return { loading, handleClick };
+  // ✅ ver más (page+1, concatena)
+  const cargarMas = useCallback(async () => {
+    if (!pagination) return;
+    if (loadingMore) return;
+    if (pagination.current_page >= pagination.last_page) return;
+
+    try {
+      setLoadingMore(true);
+      setError(null);
+
+      const nextPage = pagination.current_page + 1;
+      const filtros = { ...lastFiltrosRef.current, page: nextPage };
+
+      const url = buildUrl(filtros);
+      const resp = await fetch(url);
+
+      if (!resp.ok) {
+        setError("Error al cargar más paquetes.");
+        return;
+      }
+
+      const body = await resp.json();
+      const items = (body?.data ?? []) as PaqueteData[];
+      const pag = (body?.pagination ?? null) as Pagination | null;
+
+      setPaquetes((prev) => {
+        const merged = [...prev, ...items];
+        localStorage.setItem("resultadosBusqueda", JSON.stringify(merged));
+        window.dispatchEvent(new Event("actualizarPaquetes"));
+        return merged;
+      });
+      setPagination(pag);
+    } catch (e) {
+      console.error("Error en cargarMas:", e);
+      setError("Error al cargar más paquetes.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [pagination, loadingMore]);
+
+  // ✅ detalle sin Number()/parseInt()
+  const verDetallePaquete = useCallback(
+    (paquete: PaqueteData) => {
+      if (!paquete) return;
+
+      const idCrudo =
+        (paquete as any).paquete_externo_id ??
+        (paquete as any).id ??
+        (paquete as any).slug;
+
+      if (!idCrudo) {
+        console.warn("Paquete sin identificador usable:", paquete);
+        return;
+      }
+
+      const id = String(idCrudo).trim();
+
+      localStorage.setItem("paqueteAct", JSON.stringify(paquete));
+      localStorage.setItem("resultadosBusqueda", JSON.stringify([paquete]));
+      window.dispatchEvent(new Event("actualizarPaquetes"));
+
+      navigate(`/paquetes-busqueda/${encodeURIComponent(id)}`);
+    },
+    [navigate]
+  );
+
+  const limpiarBusqueda = useCallback(() => {
+    setPaquetes([]);
+    setPagination(null);
+    setError(null);
+    localStorage.removeItem("resultadosBusqueda");
+    window.dispatchEvent(new Event("actualizarPaquetes"));
+  }, []);
+
+  const hayMas = !!pagination && pagination.current_page < pagination.last_page;
+
+  return {
+    paquetes,
+    pagination,
+    hayMas,
+    loading,
+    loadingMore,
+    error,
+    buscarPaquetes,
+    cargarMas,
+    verDetallePaquete,
+    limpiarBusqueda,
+  };
 };
