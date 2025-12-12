@@ -11,12 +11,14 @@ import {
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import CartaMes from "../contenedorCartaMes/CartaMes";
 import { useDatosGenerales, useTarjetas } from "../../../contextos/agencia/DatosAgenciaContext";
-import { obtenerPaquetesDestacadosPaginados } from "../../../services/destacados/servicioCartasDestacadoMes";
+// ✅ NUEVO service
+import { obtenerPaquetesPaginados } from "../../../services/paquetes/obtenerPaquetesPaginados";
 import { PaqueteData } from "../../../interfaces/PaqueteData";
 
 const ContenedorCartasMes: React.FC = () => {
   const tarjetas = useTarjetas();
   const datosGenerales = useDatosGenerales();
+
   const [paquetes, setPaquetes] = useState<PaqueteData[]>([]);
   const [pagina, setPagina] = useState(1);
   const [ultimaPagina, setUltimaPagina] = useState(1);
@@ -29,9 +31,7 @@ const ContenedorCartasMes: React.FC = () => {
   const idAgencia = datosGenerales?.idAgencia;
 
   useEffect(() => {
-    if (idAgencia) {
-      cargarPagina(1);
-    }
+    if (idAgencia) cargarPagina(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perPage, idAgencia]);
 
@@ -40,13 +40,16 @@ const ContenedorCartasMes: React.FC = () => {
 
     setCargando(true);
     try {
-      const respuesta = await obtenerPaquetesDestacadosPaginados(
+      // ✅ pega a /paquetes-paginados?id=...&page=...&per_page=...
+      const respuesta = await obtenerPaquetesPaginados(
         paginaAObtener,
         perPage,
         idAgencia
+        // si querés filtros extra:
+        // , { filtro_activo: 1, filtro_ciudad: "..." }
       );
 
-      console.log("📦 Datos crudos recibidos del backend:", respuesta.paquetes);
+      console.log("📦 Paquetes recibidos:", respuesta.paquetes);
 
       setPaquetes((prev) =>
         paginaAObtener === 1 ? respuesta.paquetes : [...prev, ...respuesta.paquetes]
@@ -55,7 +58,7 @@ const ContenedorCartasMes: React.FC = () => {
       setPagina(respuesta.paginaActual);
       setUltimaPagina(respuesta.ultimaPagina);
     } catch (error) {
-      console.error("❌ Error cargando paquetes destacados:", error);
+      console.error("❌ Error cargando paquetes:", error);
     } finally {
       setCargando(false);
     }
@@ -77,8 +80,6 @@ const ContenedorCartasMes: React.FC = () => {
 
   const tarjetaColorPrimario =
     tarjetas?.color?.primario || datosGenerales.color?.primario || "#CCCCCC";
-
-
 
   return (
     <Box
@@ -110,14 +111,15 @@ const ContenedorCartasMes: React.FC = () => {
               mx: 0,
             }}
           >
-            {paquetes.map((paquete, index) => (
+            {paquetes.map((paquete: any, index) => (
               <Grid
                 item
                 xs={12}
                 sm={6}
                 md={4}
                 lg={3}
-                key={paquete.id}
+                // ✅ key robusta (Atlas/externos pueden traer id string)
+                key={paquete?.paquete_externo_id ?? paquete?.id ?? paquete?.slug ?? index}
                 sx={{
                   display: "flex",
                   justifyContent: "center",
@@ -146,15 +148,12 @@ const ContenedorCartasMes: React.FC = () => {
                 mt: 2,
                 borderRadius: "6px",
                 backgroundColor: "#CEAC41",
-                color: tarjetaTipografiaColor,              // 👈 color base
-                // Asegura que texto e ícono hereden el color
+                color: tarjetaTipografiaColor,
                 "& .MuiTypography-root, & svg": { color: "inherit" },
-                // 👇 Invertimos colores en hover
                 "&:hover": {
                   backgroundColor: "#f8d357",
                   color: tarjetaColorPrimario,
                 },
-                // Opcional: feedback al presionar / accesibilidad
                 "&:active": { filter: "brightness(0.95)" },
                 "&:focus-visible": {
                   outline: `2px solid ${tarjetaTipografiaColor}`,
@@ -172,10 +171,7 @@ const ContenedorCartasMes: React.FC = () => {
               }}
               disabled={cargando}
             >
-              <Typography
-                variant="button"
-                sx={{ fontFamily: tarjetaTipografia, color: "inherit" }}
-              >
+              <Typography variant="button" sx={{ fontFamily: tarjetaTipografia, color: "inherit" }}>
                 Ver más
               </Typography>
               <ExpandMoreIcon sx={{ color: "inherit" }} />

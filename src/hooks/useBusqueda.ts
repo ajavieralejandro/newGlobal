@@ -1,13 +1,12 @@
-// src/hooks/useBusqueda.ts
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { PaqueteData } from "../interfaces/PaqueteData";
 
 interface FiltrosBusqueda {
+  id?: string | number;
   destino?: string;
   fecha_desde?: string;
   fecha_hasta?: string;
-  id?: string | number; // agencia id (tu backend lo lee como "id")
   page?: number;
   per_page?: number;
   [key: string]: any;
@@ -30,13 +29,11 @@ export const useBusqueda = () => {
   const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
-
   const lastFiltrosRef = useRef<FiltrosBusqueda>({});
   const abortRef = useRef<AbortController | null>(null);
 
   const buildUrl = (filtros: FiltrosBusqueda) => {
     const params = new URLSearchParams();
-
     Object.entries(filtros).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== "") {
         params.append(key, String(value));
@@ -46,7 +43,6 @@ export const useBusqueda = () => {
     return "/paquetes-paginados" + (params.toString() ? `?${params.toString()}` : "");
   };
 
-  // ✅ búsqueda inicial (page=1)
   const buscarPaquetes = useCallback(async (filtros: FiltrosBusqueda = {}) => {
     try {
       setLoading(true);
@@ -63,8 +59,7 @@ export const useBusqueda = () => {
 
       lastFiltrosRef.current = merged;
 
-      const url = buildUrl(merged);
-      const resp = await fetch(url, { signal: abortRef.current.signal });
+      const resp = await fetch(buildUrl(merged), { signal: abortRef.current.signal });
 
       if (!resp.ok) {
         setError("Error al buscar paquetes.");
@@ -93,7 +88,6 @@ export const useBusqueda = () => {
     }
   }, []);
 
-  // ✅ ver más (page+1, concatena)
   const cargarMas = useCallback(async () => {
     if (!pagination) return;
     if (loadingMore) return;
@@ -106,9 +100,7 @@ export const useBusqueda = () => {
       const nextPage = pagination.current_page + 1;
       const filtros = { ...lastFiltrosRef.current, page: nextPage };
 
-      const url = buildUrl(filtros);
-      const resp = await fetch(url);
-
+      const resp = await fetch(buildUrl(filtros));
       if (!resp.ok) {
         setError("Error al cargar más paquetes.");
         return;
@@ -124,6 +116,7 @@ export const useBusqueda = () => {
         window.dispatchEvent(new Event("actualizarPaquetes"));
         return merged;
       });
+
       setPagination(pag);
     } catch (e) {
       console.error("Error en cargarMas:", e);
@@ -133,7 +126,6 @@ export const useBusqueda = () => {
     }
   }, [pagination, loadingMore]);
 
-  // ✅ detalle sin Number()/parseInt()
   const verDetallePaquete = useCallback(
     (paquete: PaqueteData) => {
       if (!paquete) return;
